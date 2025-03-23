@@ -30,3 +30,79 @@ pandoc -f docx+citations -t markdown -i Aristotle.docx -o Aristotle.md
 ```
 
 should do the trick!
+
+--- 
+
+First of all, thank you for your amazing work with BBT. Makes my life much easier!
+
+I ran into problems converting a docx to latex and thought this workaround could help others as well. Pandoc's docx+citations uses the citationId instead of the BBT citekeys (or maybe I missed an option in BBT?).
+
+Here is the native pandoc AST:
+```
+    , Cite
+        [ Citation
+            { citationId = "24578"
+            , citationPrefix = []
+            , citationSuffix = []
+            , citationMode = NormalCitation
+            , citationNoteNum = 0
+            , citationHash = 0
+            }
+        , Citation
+            { citationId = "24580"
+            , citationPrefix = []
+            , citationSuffix = []
+            , citationMode = NormalCitation
+            , citationNoteNum = 0
+            , citationHash = 0
+            }
+        ]
+        [ Str "[@watkins_posterior_2015;"
+        , Space
+        , Str "@weatherley_modification_2010]"
+        ]
+```
+
+So with the help of Claude I created `docx+citations2latex.lua` to get the desired output using
+`pandoc -f docx+citations -t latex --lua-filter=docx+citations2latex.lua  -i document.docx -o document.tex`
+Maybe this helps also others! 
+
+Content of `docx+citations2latex.lua`:
+
+```
+-- Extract citation keys from Cite elements and format as LaTeX citations
+function Cite(cite)
+    -- Extract citation keys from the text content
+    local keys = {}
+    local text = ""
+    
+    -- Concatenate all the text inside the Cite element
+    for _, inline in ipairs(cite.content) do
+        if inline.t == "Str" then
+            text = text .. inline.text
+        elseif inline.t == "Space" then
+            text = text .. " "
+        end
+    end
+    
+    -- Use pattern matching to extract citation keys
+    -- Pattern matches anything between @ and ] or , or ;
+    for key in text:gmatch("@([%w_%-%.]+)") do
+        table.insert(keys, key)
+    end
+    
+    -- If no keys were found, look at the citation IDs as fallback
+    if #keys == 0 then
+        for _, citation in ipairs(cite.citations) do
+            table.insert(keys, citation.citationId)
+        end
+    end
+    
+    -- Join keys with commas for LaTeX \cite command
+    local keysString = table.concat(keys, ",")
+    
+    -- Return a LaTeX \cite command
+    return pandoc.RawInline("latex", "\\cite{" .. keysString .. "}")
+end
+```
+
